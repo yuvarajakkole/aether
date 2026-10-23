@@ -1,0 +1,81 @@
+{
+  "_comment": "Providers Aether creates at startup. Each block is enabled only when its key env var is set. ${VAR} is read from the environment. Prices are public list prices per 1M tokens (Oct 2026); edit to match your contract.",
+  "providers": [
+    {
+      "name": "openai",
+      "kind": "openai_chat",
+      "enabled_if_env": "OPENAI_API_KEY",
+      "base_url": "${OPENAI_BASE_URL:-https://api.openai.com/v1}",
+      "api_key_env": "OPENAI_API_KEY",
+      "models": [
+        {"name": "gpt-4o-mini", "input_cost_per_mtok": 0.15, "output_cost_per_mtok": 0.6},
+        {"name": "gpt-5", "input_cost_per_mtok": 1.25, "output_cost_per_mtok": 10.0, "options": {"no_temperature": true, "max_tokens_param": "max_completion_tokens"}},
+        {"name": "gpt-5.2", "input_cost_per_mtok": 1.75, "output_cost_per_mtok": 14.0, "options": {"no_temperature": true, "max_tokens_param": "max_completion_tokens"}}
+      ]
+    },
+    {
+      "name": "anthropic",
+      "kind": "anthropic",
+      "enabled_if_env": "ANTHROPIC_API_KEY",
+      "base_url": "https://api.anthropic.com",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "models": [
+        {"name": "claude-sonnet-4-6", "input_cost_per_mtok": 3.0, "output_cost_per_mtok": 15.0},
+        {"name": "claude-opus-4-6", "input_cost_per_mtok": 5.0, "output_cost_per_mtok": 25.0}
+      ]
+    },
+    {
+      "name": "gateway-openai",
+      "kind": "openai_chat",
+      "enabled_if_env": "GATEWAY_API_KEY",
+      "base_url": "${GATEWAY_OPENAI_BASE_URL}",
+      "api_key_env": "GATEWAY_API_KEY",
+      "headers": {"${GATEWAY_APP_HEADER:-x-client-app}": "${GATEWAY_APP_NAME}"},
+      "models": [
+        {"name": "gpt-4o-mini-2024-07-18", "display_name": "gpt-4o-mini", "input_cost_per_mtok": 0.15, "output_cost_per_mtok": 0.6, "rpm_limit": 200, "tpm_limit": 50000},
+        {"name": "gpt-5-2025-08-07", "display_name": "gpt-5", "input_cost_per_mtok": 1.25, "output_cost_per_mtok": 10.0, "rpm_limit": 200, "tpm_limit": 400000, "options": {"no_temperature": true, "max_tokens_param": "max_completion_tokens", "reasoning_effort": "low"}},
+        {"name": "gpt-5.2-2025-12-11", "display_name": "gpt-5.2", "input_cost_per_mtok": 1.75, "output_cost_per_mtok": 14.0, "rpm_limit": 200, "tpm_limit": 400000, "options": {"no_temperature": true, "max_tokens_param": "max_completion_tokens"}}
+      ]
+    },
+    {
+      "name": "gateway-openai-responses",
+      "kind": "openai_responses",
+      "enabled_if_env": "GATEWAY_API_KEY",
+      "base_url": "${GATEWAY_OPENAI_BASE_URL}",
+      "api_key_env": "GATEWAY_API_KEY",
+      "headers": {"${GATEWAY_APP_HEADER:-x-client-app}": "${GATEWAY_APP_NAME}"},
+      "models": [
+        {"name": "gpt-5.4-pro-2026-03-05", "display_name": "gpt-5.4-pro", "input_cost_per_mtok": 30.0, "output_cost_per_mtok": 180.0, "rpm_limit": 200, "tpm_limit": 200000}
+      ]
+    },
+    {
+      "name": "gateway-bedrock",
+      "kind": "bedrock_converse",
+      "enabled_if_env": "GATEWAY_API_KEY",
+      "base_url": "${GATEWAY_BEDROCK_BASE_URL}",
+      "api_key_env": "GATEWAY_API_KEY",
+      "headers": {"${GATEWAY_APP_HEADER:-x-client-app}": "${GATEWAY_APP_NAME}"},
+      "models": [
+        {"name": "us.anthropic.claude-sonnet-4-6", "display_name": "claude-sonnet-4-6", "input_cost_per_mtok": 3.0, "output_cost_per_mtok": 15.0, "rpm_limit": 200, "tpm_limit": 40000},
+        {"name": "us.anthropic.claude-opus-4-6-v1", "display_name": "claude-opus-4-6", "input_cost_per_mtok": 5.0, "output_cost_per_mtok": 25.0, "rpm_limit": 200, "tpm_limit": 40000}
+      ]
+    },
+    {
+      "name": "gateway-perplexity",
+      "kind": "openai_chat",
+      "enabled_if_env": "GATEWAY_PERPLEXITY_BASE_URL",
+      "base_url": "${GATEWAY_PERPLEXITY_BASE_URL}",
+      "api_key_env": "GATEWAY_API_KEY",
+      "headers": {"${GATEWAY_APP_HEADER:-x-client-app}": "${GATEWAY_APP_NAME}"},
+      "options": {"json_mode": false},
+      "models": [
+        {"name": "sonar-reasoning-pro", "supports_tools": false, "rpm_limit": 200, "tpm_limit": 400000}
+      ]
+    }
+  ],
+  "roles": {
+    "judge": ["gateway-openai/gpt-5.2-2025-12-11", "openai/gpt-5.2", "anthropic/claude-sonnet-4-6"],
+    "generator": ["gateway-openai/gpt-5.2-2025-12-11", "openai/gpt-5.2", "anthropic/claude-sonnet-4-6"],
+    "simulator": ["gateway-openai/gpt-5.2-2025-12-11", "openai/gpt-5.2", "anthropic/claude-sonnet-4-6", "gateway-openai/gpt-4o-mini-2024-07-18", "openai/gpt-4o-mini"]
+  }
+}

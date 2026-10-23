@@ -1,0 +1,110 @@
+# Aether full stack: Postgres, migrations, API + web UI, horizontally scaled workers, sample agents.
+# Quick start: ./start.sh   (or: cp .env.example .env && docker compose up -d --build)
+# Then open http://localhost:8080 (change with AETHER_PORT in .env).
+name: ${COMPOSE_PROJECT_NAME:-aether}
+
+x-proxy-env: &proxy-env
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,samples,api},postgres,samples,api
+  http_proxy: ${HTTP_PROXY:-}
+  https_proxy: ${HTTPS_PROXY:-}
+  no_proxy: ${NO_PROXY:-localhost,127.0.0.1,postgres,samples,api},postgres,samples,api
+
+x-aether-env: &aether-env
+  <<: *proxy-env
+  AETHER_ENV: prod
+  AETHER_DATABASE_URL: postgresql+asyncpg://aether:${POSTGRES_PASSWORD:-aether}@postgres:5432/aether
+  AETHER_SECRET_KEY: ${AETHER_SECRET_KEY:?set AETHER_SECRET_KEY in .env (./start.sh generates one)}
+  AETHER_ORG_NAME: ${AETHER_ORG_NAME:-My Organization}
+  AETHER_AUTH_MODE: ${AETHER_AUTH_MODE:-none}
+  AETHER_BOOTSTRAP_API_KEY: ${AETHER_BOOTSTRAP_API_KEY:-}
+  AETHER_OIDC_ISSUER: ${AETHER_OIDC_ISSUER:-}
+  AETHER_OIDC_AUDIENCE: ${AETHER_OIDC_AUDIENCE:-}
+  AETHER_OIDC_JWKS_URL: ${AETHER_OIDC_JWKS_URL:-}
+  AETHER_BOOTSTRAP_FILE: /config/bootstrap.json
+  AETHER_SEED_SAMPLES: ${AETHER_SEED_SAMPLES:-true}
+  AETHER_SAMPLE_TOOLS_URL: http://samples:8100/tools
+  AETHER_SAMPLE_AGENTS_URL: http://samples:8100
+  AETHER_CA_BUNDLE: ${AETHER_CA_BUNDLE:-}
+  AETHER_LOG_LEVEL: ${AETHER_LOG_LEVEL:-INFO}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GATEWAY_API_KEY: ${GATEWAY_API_KEY:-}
+  GATEWAY_APP_NAME: ${GATEWAY_APP_NAME:-}
+  GATEWAY_APP_HEADER: ${GATEWAY_APP_HEADER:-x-client-app}
+  GATEWAY_OPENAI_BASE_URL: ${GATEWAY_OPENAI_BASE_URL:-}
+  GATEWAY_BEDROCK_BASE_URL: ${GATEWAY_BEDROCK_BASE_URL:-}
+  GATEWAY_PERPLEXITY_BASE_URL: ${GATEWAY_PERPLEXITY_BASE_URL:-}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aether}
+      POSTGRES_DB: aether
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      args:
+        WEB: ${AETHER_WEB_BUILD:-auto}   # auto: use frontend/dist if present, else build the UI
+    image: aether:local
+    command: ["aether", "migrate"]
+    environment: *aether-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: aether:local
+    environment: *aether-env
+    ports: ["${AETHER_PORT:-8080}:8000"]
+    volumes: ["./config:/config:ro"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  worker:
+    image: aether:local
+    command: ["aether", "worker", "--metrics-port", "9101"]
+    environment:
+      <<: *aether-env
+      AETHER_WORKER_CONCURRENCY: ${AETHER_WORKER_CONCURRENCY:-12}
+    volumes: ["./config:/config:ro"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/metrics', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    deploy:
+      replicas: ${AETHER_WORKERS:-2}
+    restart: unless-stopped
+
+  samples:
+    build: ./sample_agents
+    image: aether-samples:local
+    environment:
+      <<: *proxy-env
+      SAMPLE_LLM_BASE_URL: ${SAMPLE_LLM_BASE_URL:-}
+      SAMPLE_LLM_API_KEY: ${SAMPLE_LLM_API_KEY:-}
+      SAMPLE_LLM_MODEL: ${SAMPLE_LLM_MODEL:-}
+      SAMPLE_LLM_HEADERS: ${SAMPLE_LLM_HEADERS:-}
+      SAMPLE_CA_BUNDLE: ${AETHER_CA_BUNDLE:-}
+    volumes: ["./config:/config:ro"]
+    ports: ["${SAMPLES_PORT:-8100}:8100"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
